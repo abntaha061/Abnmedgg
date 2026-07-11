@@ -25,11 +25,9 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        # لا تستخدم cache هنا — هنعمل cache يدوي أشمل في الخطوات الجاية
 
     # ─────────────────────────────────────────
-    # 3. Cache الـ Gradle (dependencies + build cache)
-    #    أهم خطوة لتسريع الـ build
+    # 3. Cache الـ Gradle
     # ─────────────────────────────────────────
     - name: Cache Gradle Dependencies
       uses: actions/cache@v4
@@ -43,7 +41,7 @@ jobs:
           gradle-${{ runner.os }}-
 
     # ─────────────────────────────────────────
-    # 4. Cache الـ Android SDK Build Tools
+    # 4. Cache الـ Android SDK
     # ─────────────────────────────────────────
     - name: Cache Android SDK
       uses: actions/cache@v4
@@ -57,8 +55,7 @@ jobs:
           android-sdk-${{ runner.os }}-
 
     # ─────────────────────────────────────────
-    # 5. Cache خاص بـ Chaquopy (Python + pip packages)
-    #    بدونه بيحمل yt-dlp من الأول كل مرة (دقايق!)
+    # 5. Cache Chaquopy
     # ─────────────────────────────────────────
     - name: Cache Chaquopy Python & Packages
       uses: actions/cache@v4
@@ -71,22 +68,27 @@ jobs:
           chaquopy-${{ runner.os }}-
 
     # ─────────────────────────────────────────
-    # 6. صلاحيات gradlew
-    #    (لا تولد wrapper جديد — استخدم اللي في الـ repo)
+    # 6. توليد Gradle Wrapper
+    #    AGP 9.1.1 يحتاج Gradle 8.11.1
     # ─────────────────────────────────────────
+    - name: Setup Gradle Wrapper
+      run: gradle wrapper --gradle-version 8.11.1 --distribution-type bin
+
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
     # ─────────────────────────────────────────
     # 7. بناء الـ APK
+    #    --no-configuration-cache لتجنب مشاكل AGP 9.x
+    #    -Xmx4g مطابق لـ gradle.properties
     # ─────────────────────────────────────────
     - name: Build Debug APK
-      run: ./gradlew assembleDebug --stacktrace --no-daemon
+      run: ./gradlew assembleDebug --stacktrace --no-daemon --no-configuration-cache
       env:
-        GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx2g -Dorg.gradle.daemon=false"
+        GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8"
 
     # ─────────────────────────────────────────
-    # 8. عرض حجم الـ APK في الـ log
+    # 8. التحقق من الـ APK
     # ─────────────────────────────────────────
     - name: Show APK Size
       run: |
@@ -100,17 +102,17 @@ jobs:
         fi
 
     # ─────────────────────────────────────────
-    # 9. رفع الـ APK كـ Artifact
+    # 9. رفع الـ APK
     # ─────────────────────────────────────────
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: app-debug-${{ github.run_number }}
         path: app/build/outputs/apk/debug/app-debug.apk
-        retention-days: 7   # احتفظ بالـ APK 7 أيام بس (توفير مساحة)
+        retention-days: 7
 
     # ─────────────────────────────────────────
-    # 10. إشعار بالنتيجة في حالة الفشل
+    # 10. رفع الـ Logs عند الفشل
     # ─────────────────────────────────────────
     - name: Upload Build Logs on Failure
       if: failure()
