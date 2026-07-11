@@ -15,6 +15,7 @@ class UserPreferences(private val context: Context) {
         private val DOWNLOAD_URI_KEY = stringPreferencesKey("download_uri")
         private val INCOGNITO_MODE_KEY = booleanPreferencesKey("incognito_mode")
         private val DEFAULT_QUALITY_KEY = stringPreferencesKey("default_quality")
+        private val COBALT_SERVER_KEY = stringPreferencesKey("cobalt_server")
     }
 
     val downloadUri: Flow<String?> = context.dataStore.data
@@ -25,6 +26,9 @@ class UserPreferences(private val context: Context) {
 
     val defaultQuality: Flow<String> = context.dataStore.data
         .map { preferences -> preferences[DEFAULT_QUALITY_KEY] ?: "1080p" }
+
+    val cobaltServerUrl: Flow<String> = context.dataStore.data
+        .map { preferences -> preferences[COBALT_SERVER_KEY] ?: "https://cobalt.inst.moe" }
 
     suspend fun setDownloadUri(uri: String?) {
         context.dataStore.edit { preferences ->
@@ -45,6 +49,12 @@ class UserPreferences(private val context: Context) {
     suspend fun setDefaultQuality(quality: String) {
         context.dataStore.edit { preferences ->
             preferences[DEFAULT_QUALITY_KEY] = quality
+        }
+    }
+
+    suspend fun setCobaltServerUrl(url: String) {
+        context.dataStore.edit { preferences ->
+            preferences[COBALT_SERVER_KEY] = url
         }
     }
 }

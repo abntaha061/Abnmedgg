@@ -48,6 +48,9 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
     val defaultQuality: StateFlow<String> = userPreferences.defaultQuality
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "1080p")
 
+    val cobaltServerUrl: StateFlow<String> = userPreferences.cobaltServerUrl
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "https://cobalt.inst.moe")
+
     fun extractUrl(url: String) {
         if (url.isBlank()) {
             _extractionState.value = ExtractionUiState.Error("Please enter a valid link")
@@ -84,6 +87,12 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
     fun setDefaultQuality(quality: String) {
         viewModelScope.launch {
             userPreferences.setDefaultQuality(quality)
+        }
+    }
+
+    fun setCobaltServerUrl(url: String) {
+        viewModelScope.launch {
+            userPreferences.setCobaltServerUrl(url)
         }
     }
 

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Info
@@ -35,8 +36,11 @@ fun SettingsScreen(
     val isIncognito by viewModel.isIncognito.collectAsState()
     val downloadFolderUri by viewModel.downloadFolderUri.collectAsState()
     val defaultQuality by viewModel.defaultQuality.collectAsState()
+    val cobaltServerUrl by viewModel.cobaltServerUrl.collectAsState()
 
     var showQualityDialog by remember { mutableStateOf(false) }
+    var showServerDialog by remember { mutableStateOf(false) }
+    var inputServerUrl by remember(cobaltServerUrl) { mutableStateOf(cobaltServerUrl) }
     val qualityOptions = listOf("1080p", "720p", "480p", "360p", "Audio MP3")
 
     // Folder selection launcher via SAF
@@ -213,6 +217,54 @@ fun SettingsScreen(
             }
         }
 
+        // Cobalt Server Row
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+            ),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showServerDialog = true },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Dns,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Column {
+                            Text(
+                                text = "Cobalt Server URL",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = cobaltServerUrl,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
         // App Information Row
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -282,6 +334,102 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showQualityDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Cobalt Server Dialog
+    if (showServerDialog) {
+        var inputError by remember { mutableStateOf<String?>(null) }
+        AlertDialog(
+            onDismissRequest = { showServerDialog = false },
+            title = { Text("Cobalt Server Settings") },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Specify a custom Cobalt instance or choose a preset below. Cobalt resolves media links.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
+                    OutlinedTextField(
+                        value = inputServerUrl,
+                        onValueChange = { 
+                            inputServerUrl = it
+                            inputError = null
+                        },
+                        label = { Text("Server URL") },
+                        placeholder = { Text("https://example.com") },
+                        isError = inputError != null,
+                        supportingText = inputError?.let { { Text(it) } },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Text(
+                        text = "Popular Public Presets:",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    
+                    val presets = listOf(
+                        "https://cobalt.inst.moe" to "cobalt.inst.moe (Recommended)",
+                        "https://cobalt.synestia.pl" to "cobalt.synestia.pl",
+                        "https://co.e9t.cc" to "co.e9t.cc",
+                        "https://co.dispp.li" to "co.dispp.li"
+                    )
+                    
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        presets.forEach { (url, label) ->
+                            OutlinedButton(
+                                onClick = { 
+                                    inputServerUrl = url
+                                    inputError = null
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(label, style = MaterialTheme.typography.bodyMedium)
+                                    if (inputServerUrl.trim().removeSuffix("/") == url) {
+                                        Text("Selected", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val trimmed = inputServerUrl.trim()
+                        if (trimmed.isEmpty() || !trimmed.startsWith("http")) {
+                            inputError = "Must be a valid URL starting with http:// or https://"
+                        } else {
+                            viewModel.setCobaltServerUrl(trimmed)
+                            showServerDialog = false
+                        }
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showServerDialog = false }) {
                     Text("Cancel")
                 }
             }

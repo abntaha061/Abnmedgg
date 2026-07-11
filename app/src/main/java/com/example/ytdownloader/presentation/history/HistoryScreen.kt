@@ -258,8 +258,7 @@ fun HistoryItemCard(
                                     setDataAndType(uri, mimeType)
                                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                 }
-                                val chooser = Intent.createChooser(intent, "Open Media")
-                                context.startActivity(chooser)
+                                context.startActivity(intent)
                             } catch (e: Exception) {
                                 e.printStackTrace()
                             }

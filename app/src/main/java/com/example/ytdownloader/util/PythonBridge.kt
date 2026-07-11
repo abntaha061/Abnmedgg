@@ -9,6 +9,7 @@ import com.example.ytdownloader.domain.model.VideoInfo
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -207,39 +208,80 @@ class PythonBridge(private val context: Context) {
         val targetFile = File(context.cacheDir, "${task.id}_download.${extension}")
         
         try {
-            var downloadUrl = task.url
+            val userPreferences = com.example.ytdownloader.data.preferences.UserPreferences(context)
+            val cobaltServerUrl = userPreferences.cobaltServerUrl.first()
             
-            try {
-                val jsonMediaType = "application/json; charset=utf-8".toMediaType()
-                val requestBody = JsonObject().apply {
-                    addProperty("url", task.url)
-                    addProperty("videoQuality", if (task.selectedVideoFormatId == "1080p") "1080" else "720")
-                    addProperty("audioFormat", if (extension == "mp3") "mp3" else "best")
-                    addProperty("filenamePattern", "basic")
-                }.toString().toRequestBody(jsonMediaType)
+            var downloadUrl: String? = null
+            var errorMsg: String? = null
+            var resolved = false
 
-                val request = Request.Builder()
-                    .url("https://api.cobalt.tools/api/json")
-                    .addHeader("Accept", "application/json")
-                    .addHeader("Content-Type", "application/json")
-                    .post(requestBody)
-                    .build()
+            // Build request body supporting both old and new properties
+            val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+            val requestBody = JsonObject().apply {
+                addProperty("url", task.url)
+                addProperty("videoQuality", if (task.selectedVideoFormatId == "1080p") "1080" else "720")
+                addProperty("audioFormat", if (extension == "mp3") "mp3" else "best")
+                addProperty("filenamePattern", "basic") // old (v7)
+                addProperty("filenameStyle", "basic")  // new (v10)
+            }.toString().toRequestBody(jsonMediaType)
 
-                client.newCall(request).execute().use { response ->
-                    if (response.isSuccessful) {
-                        val bodyString = response.body?.string()
-                        val json = gson.fromJson(bodyString, JsonObject::class.java)
-                        if (json.has("url")) {
-                            downloadUrl = json.get("url").asString
-                            Log.d("PythonBridge", "Resolved real streaming URL: $downloadUrl")
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e("PythonBridge", "Cobalt resolution failed, using direct url fallback", e)
+            // Try resolving using both the root URL (Cobalt v10 default, POST /)
+            // and the /api/json endpoint (Cobalt v7 default)
+            val targetUrls = mutableListOf<String>()
+            val baseUrl = cobaltServerUrl.trim().removeSuffix("/")
+            if (baseUrl.endsWith("/api/json")) {
+                targetUrls.add(baseUrl)
+                targetUrls.add(baseUrl.substringBeforeLast("/api/json"))
+            } else {
+                targetUrls.add(baseUrl)
+                targetUrls.add("$baseUrl/api/json")
             }
 
-            val request = Request.Builder().url(downloadUrl).build()
+            for (targetUrl in targetUrls) {
+                try {
+                    val request = Request.Builder()
+                        .url(targetUrl)
+                        .addHeader("Accept", "application/json")
+                        .addHeader("Content-Type", "application/json")
+                        .post(requestBody)
+                        .build()
+
+                    client.newCall(request).execute().use { response ->
+                        val bodyString = response.body?.string() ?: ""
+                        if (response.isSuccessful) {
+                            val json = gson.fromJson(bodyString, JsonObject::class.java)
+                            if (json.has("url")) {
+                                downloadUrl = json.get("url").asString
+                                Log.d("PythonBridge", "Resolved real streaming URL from $targetUrl: $downloadUrl")
+                                resolved = true
+                            } else if (json.has("status") && json.get("status").asString == "error") {
+                                val text = if (json.has("text")) json.get("text").asString else "Unknown error"
+                                errorMsg = text
+                                Log.e("PythonBridge", "Cobalt server $targetUrl returned error: $text")
+                            }
+                        } else if (response.code != 404) {
+                            try {
+                                val json = gson.fromJson(bodyString, JsonObject::class.java)
+                                if (json.has("text")) {
+                                    errorMsg = json.get("text").asString
+                                }
+                            } catch (ignored: Exception) {}
+                            Log.e("PythonBridge", "Request to $targetUrl failed with code ${response.code}: $bodyString")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("PythonBridge", "Attempt failed for $targetUrl", e)
+                }
+                if (resolved) break
+            }
+
+            val finalUrl = downloadUrl ?: throw Exception(
+                "Failed to resolve video stream. " +
+                if (!errorMsg.isNullOrEmpty()) "Server error: $errorMsg. " else "" +
+                "Please configure a working public Cobalt server in Settings (e.g. cobalt.inst.moe)."
+            )
+
+            val request = Request.Builder().url(finalUrl).build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) throw Exception("Failed to connect to media host (code ${response.code})")
                 val body = response.body ?: throw Exception("Host returned empty response body")
