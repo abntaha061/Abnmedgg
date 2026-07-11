@@ -145,8 +145,44 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun pauseDownload(taskId: String) {
+        viewModelScope.launch {
+            workManager.cancelUniqueWork(taskId)
+            val task = repository.getDownloadById(taskId)
+            if (task != null) {
+                repository.updateDownload(task.copy(status = DownloadStatus.PAUSED))
+            }
+        }
+    }
+
+    fun resumeDownload(taskId: String) {
+        viewModelScope.launch {
+            val task = repository.getDownloadById(taskId) ?: return@launch
+            val updatedTask = task.copy(status = DownloadStatus.QUEUED, progress = 0f)
+            repository.updateDownload(updatedTask)
+
+            val workRequest = OneTimeWorkRequestBuilder<DownloadWorker>()
+                .setInputData(workDataOf(DownloadWorker.KEY_TASK_ID to updatedTask.id))
+                .addTag(updatedTask.id)
+
+            if (updatedTask.scheduledTime != null) {
+                val delayMs = updatedTask.scheduledTime - System.currentTimeMillis()
+                if (delayMs > 0) {
+                    workRequest.setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
+                }
+            }
+
+            workManager.enqueueUniqueWork(
+                updatedTask.id,
+                ExistingWorkPolicy.REPLACE,
+                workRequest.build()
+            )
+        }
+    }
+
     fun deleteHistoryItem(taskId: String) {
         viewModelScope.launch {
+            workManager.cancelUniqueWork(taskId)
             repository.deleteDownloadById(taskId)
         }
     }

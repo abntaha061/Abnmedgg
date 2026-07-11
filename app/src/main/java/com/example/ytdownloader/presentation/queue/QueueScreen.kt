@@ -8,8 +8,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Downloading
 import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,7 +36,11 @@ fun QueueScreen(
 ) {
     val downloads by viewModel.downloads.collectAsState()
     val activeDownloads = remember(downloads) {
-        downloads.filter { it.status == DownloadStatus.RUNNING || it.status == DownloadStatus.QUEUED || it.status == DownloadStatus.PAUSED }
+        downloads.filter { 
+            it.status == DownloadStatus.RUNNING || 
+            it.status == DownloadStatus.QUEUED || 
+            it.status == DownloadStatus.PAUSED 
+        }
     }
 
     Column(
@@ -42,7 +49,7 @@ fun QueueScreen(
             .padding(16.dp)
     ) {
         Text(
-            text = "Active Downloads",
+            text = "التحميلات النشطة / Active Downloads",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
@@ -68,13 +75,13 @@ fun QueueScreen(
                         modifier = Modifier.size(64.dp)
                     )
                     Text(
-                        text = "Your active queue is empty",
+                        text = "قائمة التحميلات فارغة حالياً",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Paste a URL on the 'Download' tab to extract media and start downloading.",
+                        text = "ضع رابط الفيديو في خانة 'تحميل' لبدء التنزيل والمتابعة هنا.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -91,7 +98,9 @@ fun QueueScreen(
                 items(activeDownloads, key = { it.id }) { task ->
                     ActiveDownloadCard(
                         task = task,
-                        onCancel = { viewModel.cancelDownload(task.id) }
+                        onPause = { viewModel.pauseDownload(task.id) },
+                        onResume = { viewModel.resumeDownload(task.id) },
+                        onDelete = { viewModel.deleteHistoryItem(task.id) }
                     )
                 }
             }
@@ -102,7 +111,9 @@ fun QueueScreen(
 @Composable
 fun ActiveDownloadCard(
     task: DownloadTask,
-    onCancel: () -> Unit
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onDelete: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -142,19 +153,47 @@ fun ActiveDownloadCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    val statusText = when (task.status) {
+                        DownloadStatus.RUNNING -> "جاري التحميل... / Downloading..."
+                        DownloadStatus.QUEUED -> "في الانتظار... / Queued..."
+                        DownloadStatus.PAUSED -> "مؤقت / Paused"
+                        else -> "جاري البدء... / Starting..."
+                    }
                     Text(
-                        text = if (task.status == DownloadStatus.RUNNING) "Status: Downloading..." else "Status: Queued",
+                        text = statusText,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = if (task.status == DownloadStatus.PAUSED) 
+                            MaterialTheme.colorScheme.onSurfaceVariant 
+                        else 
+                            MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Medium
                     )
                 }
 
-                // Action cancel button
-                IconButton(onClick = onCancel) {
+                // Play/Pause button
+                if (task.status == DownloadStatus.RUNNING || task.status == DownloadStatus.QUEUED) {
+                    IconButton(onClick = onPause) {
+                        Icon(
+                            imageVector = Icons.Default.Pause,
+                            contentDescription = "Pause download",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                } else if (task.status == DownloadStatus.PAUSED) {
+                    IconButton(onClick = onResume) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Resume download",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                // Delete Button
+                IconButton(onClick = onDelete) {
                     Icon(
-                        imageVector = Icons.Default.Cancel,
-                        contentDescription = "Cancel download",
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete task",
                         tint = MaterialTheme.colorScheme.error
                     )
                 }
@@ -171,7 +210,10 @@ fun ActiveDownloadCard(
                         .fillMaxWidth()
                         .height(8.dp)
                         .clip(RoundedCornerShape(4.dp)),
-                    color = MaterialTheme.colorScheme.primary,
+                    color = if (task.status == DownloadStatus.PAUSED) 
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) 
+                    else 
+                        MaterialTheme.colorScheme.primary,
                     trackColor = MaterialTheme.colorScheme.surface
                 )
 
@@ -192,7 +234,10 @@ fun ActiveDownloadCard(
                         text = "${(task.progress * 100).toInt()}%",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        color = if (task.status == DownloadStatus.PAUSED) 
+                            MaterialTheme.colorScheme.onSurfaceVariant 
+                        else 
+                            MaterialTheme.colorScheme.primary
                     )
                 }
             }

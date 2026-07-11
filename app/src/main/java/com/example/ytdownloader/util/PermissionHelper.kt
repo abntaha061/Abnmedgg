@@ -9,7 +9,7 @@ import androidx.core.content.ContextCompat
 
 object PermissionHelper {
 
-    fun hasPermissions(context: Context): Boolean {
+    fun getRequiredPermissions(): List<String> {
         val permissions = mutableListOf<String>()
         
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -21,7 +21,11 @@ object PermissionHelper {
             permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
         
-        return permissions.all {
+        return permissions
+    }
+
+    fun hasPermissions(context: Context): Boolean {
+        return getRequiredPermissions().all {
             ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
         }
     }

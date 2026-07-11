@@ -24,27 +24,91 @@ class PythonBridge(private val context: Context) {
     private val client = OkHttpClient()
     private val gson = Gson()
 
+    private fun extractYoutubeVideoId(url: String): String? {
+        return try {
+            if (url.contains("youtu.be/")) {
+                url.substringAfter("youtu.be/").substringBefore("?").substringBefore("/")
+            } else if (url.contains("v=")) {
+                url.substringAfter("v=").substringBefore("&").substringBefore("/")
+            } else if (url.contains("embed/")) {
+                url.substringAfter("embed/").substringBefore("?").substringBefore("/")
+            } else if (url.contains("shorts/")) {
+                url.substringAfter("shorts/").substringBefore("?").substringBefore("/")
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     suspend fun fetchVideoInfo(url: String): VideoInfo = withContext(Dispatchers.IO) {
         try {
             val isYoutube = url.contains("youtube.com") || url.contains("youtu.be")
             val isSoundcloud = url.contains("soundcloud.com")
             
             val id = UUID.randomUUID().toString()
-            val title = if (isYoutube) {
-                if (url.contains("dQw4w9WgXcQ")) "Rick Astley - Never Gonna Give You Up (Official Music Video)"
-                else "YouTube Video Downloader Track"
-            } else if (isSoundcloud) {
-                "SoundCloud Audio Track Stream"
-            } else {
-                "Extracted Media Stream"
-            }
-
-            val uploader = if (isYoutube) "RickAstleyVEVO" else "SoundCloud Artist"
-            val duration = if (isYoutube) 212 else 180
-            val thumbnail = if (isYoutube) {
-                "https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg"
+            var title = if (isYoutube) "YouTube Video" else if (isSoundcloud) "SoundCloud Audio" else "Extracted Media Stream"
+            var uploader = if (isYoutube) "YouTube Channel" else if (isSoundcloud) "SoundCloud Artist" else "Media Creator"
+            
+            val videoId = if (isYoutube) extractYoutubeVideoId(url) else null
+            var thumbnail = if (isYoutube && videoId != null) {
+                "https://img.youtube.com/vi/$videoId/hqdefault.jpg"
             } else {
                 "https://images.unsplash.com/photo-1614680376593-902f74fa0d41?w=400"
+            }
+            val duration = if (isYoutube) 212 else 180
+
+            if (isYoutube) {
+                try {
+                    val encodedUrl = java.net.URLEncoder.encode(url, "UTF-8")
+                    val oembedUrl = "https://www.youtube.com/oembed?url=$encodedUrl&format=json"
+                    val request = Request.Builder().url(oembedUrl).build()
+                    client.newCall(request).execute().use { response ->
+                        if (response.isSuccessful) {
+                            val bodyString = response.body?.string()
+                            if (!bodyString.isNullOrEmpty()) {
+                                val json = gson.fromJson(bodyString, JsonObject::class.java)
+                                if (json.has("title")) {
+                                    title = json.get("title").asString
+                                }
+                                if (json.has("author_name")) {
+                                    uploader = json.get("author_name").asString
+                                }
+                                if (json.has("thumbnail_url")) {
+                                    thumbnail = json.get("thumbnail_url").asString
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("PythonBridge", "Failed to fetch YouTube oEmbed", e)
+                }
+            } else if (isSoundcloud) {
+                try {
+                    val encodedUrl = java.net.URLEncoder.encode(url, "UTF-8")
+                    val oembedUrl = "https://soundcloud.com/oembed?url=$encodedUrl&format=json"
+                    val request = Request.Builder().url(oembedUrl).build()
+                    client.newCall(request).execute().use { response ->
+                        if (response.isSuccessful) {
+                            val bodyString = response.body?.string()
+                            if (!bodyString.isNullOrEmpty()) {
+                                val json = gson.fromJson(bodyString, JsonObject::class.java)
+                                if (json.has("title")) {
+                                    title = json.get("title").asString
+                                }
+                                if (json.has("author_name")) {
+                                    uploader = json.get("author_name").asString
+                                }
+                                if (json.has("thumbnail_url")) {
+                                    thumbnail = json.get("thumbnail_url").asString
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("PythonBridge", "Failed to fetch SoundCloud oEmbed", e)
+                }
             }
 
             val formats = mutableListOf<FormatInfo>()
