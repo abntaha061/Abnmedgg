@@ -237,12 +237,29 @@ fun HistoryItemCard(
                     Button(
                         onClick = {
                             try {
+                                val filePath = task.filePath ?: ""
+                                val uri = if (filePath.startsWith("content://")) {
+                                    Uri.parse(filePath)
+                                } else {
+                                    val file = java.io.File(filePath)
+                                    if (file.exists()) {
+                                        androidx.core.content.FileProvider.getUriForFile(
+                                            context,
+                                            "${context.packageName}.fileprovider",
+                                            file
+                                        )
+                                    } else {
+                                        Uri.parse(filePath)
+                                    }
+                                }
+                                
+                                val mimeType = if (task.selectedAudioFormatId == "audio_only") "audio/*" else "video/*"
                                 val intent = Intent(Intent.ACTION_VIEW).apply {
-                                    val uri = Uri.parse(task.filePath)
-                                    setDataAndType(uri, if (task.selectedAudioFormatId == "audio_only") "audio/*" else "video/*")
+                                    setDataAndType(uri, mimeType)
                                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                 }
-                                context.startActivity(intent)
+                                val chooser = Intent.createChooser(intent, "Open Media")
+                                context.startActivity(chooser)
                             } catch (e: Exception) {
                                 e.printStackTrace()
                             }

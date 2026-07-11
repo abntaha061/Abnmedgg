@@ -57,7 +57,56 @@ class PythonBridge(private val context: Context) {
             } else {
                 "https://images.unsplash.com/photo-1614680376593-902f74fa0d41?w=400"
             }
-            val duration = if (isYoutube) 212 else 180
+            var duration = if (isYoutube) 212 else 180
+
+            if (isYoutube && videoId != null) {
+                try {
+                    val watchRequest = Request.Builder()
+                        .url("https://www.youtube.com/watch?v=$videoId")
+                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                        .build()
+                    client.newCall(watchRequest).execute().use { response ->
+                        if (response.isSuccessful) {
+                            val html = response.body?.string() ?: ""
+                            var parsedDuration: Int? = null
+                            
+                            // 1. Try finding lengthSeconds in JSON
+                            val lengthSecondsRegex = "\"lengthSeconds\":\"(\\d+)\"".toRegex()
+                            val match = lengthSecondsRegex.find(html)
+                            if (match != null) {
+                                parsedDuration = match.groupValues[1].toIntOrNull()
+                            }
+                            
+                            // 2. Try finding og:video:duration
+                            if (parsedDuration == null) {
+                                val ogDurationRegex = "<meta property=\"og:video:duration\" content=\"(\\d+)\"".toRegex()
+                                val matchOg = ogDurationRegex.find(html)
+                                if (matchOg != null) {
+                                    parsedDuration = matchOg.groupValues[1].toIntOrNull()
+                                }
+                            }
+                            
+                            // 3. Try finding itemprop="duration"
+                            if (parsedDuration == null) {
+                                val itempropDurationRegex = "<meta itemprop=\"duration\" content=\"PT(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?\"".toRegex()
+                                val matchItem = itempropDurationRegex.find(html)
+                                if (matchItem != null) {
+                                    val hours = matchItem.groupValues[1].toIntOrNull() ?: 0
+                                    val minutes = matchItem.groupValues[2].toIntOrNull() ?: 0
+                                    val seconds = matchItem.groupValues[3].toIntOrNull() ?: 0
+                                    parsedDuration = hours * 3600 + minutes * 60 + seconds
+                                }
+                            }
+                            
+                            if (parsedDuration != null && parsedDuration > 0) {
+                                duration = parsedDuration
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("PythonBridge", "Failed to scrape YouTube watch page for duration", e)
+                }
+            }
 
             if (isYoutube) {
                 try {
@@ -113,13 +162,19 @@ class PythonBridge(private val context: Context) {
 
             val formats = mutableListOf<FormatInfo>()
             if (isSoundcloud) {
-                formats.add(FormatInfo("audio_mp3", "mp3", null, 4200000, null, null, "mp3", url, "MP3 Audio (128kbps)", false, true))
-                formats.add(FormatInfo("audio_flac", "flac", null, 12000000, null, null, "flac", url, "FLAC Lossless Audio", false, true))
+                val mp3Size = duration * 128000L / 8L
+                val flacSize = duration * 320000L / 8L
+                formats.add(FormatInfo("audio_mp3", "mp3", null, mp3Size, null, null, "mp3", url, "MP3 Audio (128kbps)", false, true))
+                formats.add(FormatInfo("audio_flac", "flac", null, flacSize, null, null, "flac", url, "FLAC Lossless Audio", false, true))
             } else {
-                formats.add(FormatInfo("1080p", "mp4", "1920x1080", 25000000, 30, "h264", "aac", url, "HD 1080p MP4", true, true))
-                formats.add(FormatInfo("720p", "mp4", "1280x720", 15000000, 30, "h264", "aac", url, "HD 720p MP4", true, true))
-                formats.add(FormatInfo("480p", "mp4", "854x480", 8000000, 30, "h264", "aac", url, "SD 480p MP4", true, true))
-                formats.add(FormatInfo("audio_only", "mp3", null, 3500000, null, null, "mp3", url, "Audio Only MP3", false, true))
+                val size1080p = duration * 940000L / 8L
+                val size720p = duration * 560000L / 8L
+                val size480p = duration * 300000L / 8L
+                val sizeAudio = duration * 128000L / 8L
+                formats.add(FormatInfo("1080p", "mp4", "1920x1080", size1080p, 30, "h264", "aac", url, "HD 1080p MP4", true, true))
+                formats.add(FormatInfo("720p", "mp4", "1280x720", size720p, 30, "h264", "aac", url, "HD 720p MP4", true, true))
+                formats.add(FormatInfo("480p", "mp4", "854x480", size480p, 30, "h264", "aac", url, "SD 480p MP4", true, true))
+                formats.add(FormatInfo("audio_only", "mp3", null, sizeAudio, null, null, "mp3", url, "Audio Only MP3", false, true))
             }
 
             val subtitles = listOf(
