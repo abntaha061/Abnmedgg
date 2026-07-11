@@ -78,7 +78,24 @@ jobs:
       run: chmod +x gradlew
 
     # ─────────────────────────────────────────
-    # 7. بناء الـ APK
+    # 7. توليد debug.keystore
+    #    المشروع بيستخدم signingConfig مخصص اسمه debugConfig
+    #    بيدور على debug.keystore في root المشروع
+    # ─────────────────────────────────────────
+    - name: Generate Debug Keystore
+      run: |
+        keytool -genkey -v \
+          -keystore debug.keystore \
+          -storepass android \
+          -alias androiddebugkey \
+          -keypass android \
+          -keyalg RSA \
+          -keysize 2048 \
+          -validity 10000 \
+          -dname "CN=Android Debug,O=Android,C=US"
+
+    # ─────────────────────────────────────────
+    # 8. بناء الـ APK
     #    --no-configuration-cache لتجنب مشاكل AGP 9.x
     #    -Xmx4g مطابق لـ gradle.properties
     # ─────────────────────────────────────────
@@ -88,7 +105,7 @@ jobs:
         GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8"
 
     # ─────────────────────────────────────────
-    # 8. التحقق من الـ APK
+    # 9. التحقق من الـ APK
     # ─────────────────────────────────────────
     - name: Show APK Size
       run: |
@@ -102,7 +119,7 @@ jobs:
         fi
 
     # ─────────────────────────────────────────
-    # 9. رفع الـ APK
+    # 10. رفع الـ APK
     # ─────────────────────────────────────────
     - name: Upload APK
       uses: actions/upload-artifact@v4
@@ -112,7 +129,7 @@ jobs:
         retention-days: 7
 
     # ─────────────────────────────────────────
-    # 10. رفع الـ Logs عند الفشل
+    # 11. رفع الـ Logs عند الفشل
     # ─────────────────────────────────────────
     - name: Upload Build Logs on Failure
       if: failure()
